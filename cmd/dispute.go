@@ -4,12 +4,7 @@
 package cmd
 
 import (
-	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/pantos-io/go-testimonium/ethereum/ethash"
-
-	"log"
-
 	"github.com/spf13/cobra"
 )
 
@@ -30,18 +25,19 @@ var disputeCmd = &cobra.Command{
 
 		// get blockNumber, nonce and RlpHeaderHashWithoutNonce and generate dataSetLookup and witnessForLookup
 		testimoniumClient = createTestimoniumClient()
-		header, err := testimoniumClient.BlockHeader(blockHashBytes32, disputeFlagChain)
-		if err != nil {
-			log.Fatal("Failed to retrieve header from contract: " + err.Error())
-		}
-
-		fmt.Println("create DAG, compute dataSetLookup and witnessForLookup")
-		// get DAG and compute dataSetLookup and witnessForLookup
-		blockMetaData := ethash.NewBlockMetaData(header.BlockNumber.Uint64(), header.Nonce.Uint64(), header.RlpHeaderHashWithoutNonce)
-		dataSetLookup := blockMetaData.DAGElementArray()
-		witnessForLookup := blockMetaData.DAGProofArray()
-
-		testimoniumClient.DisputeBlock(blockHash, dataSetLookup, witnessForLookup, disputeFlagChain)
+		testimoniumClient.GetHeaderFromTxData(blockHashBytes32, disputeFlagChain)
+		//header, err := testimoniumClient.BlockHeader(blockHashBytes32, disputeFlagChain)
+		//if err != nil {
+		//	log.Fatal("Failed to retrieve header from contract: " + err.Error())
+		//}
+		//
+		//fmt.Println("create DAG, compute dataSetLookup and witnessForLookup")
+		//// get DAG and compute dataSetLookup and witnessForLookup
+		//blockMetaData := ethash.NewBlockMetaData(header.BlockNumber.Uint64(), header.Nonce.Uint64(), header.RlpHeaderHashWithoutNonce)
+		//dataSetLookup := blockMetaData.DAGElementArray()
+		//witnessForLookup := blockMetaData.DAGProofArray()
+		//
+		//testimoniumClient.DisputeBlock(blockHash, dataSetLookup, witnessForLookup, disputeFlagChain)
 	},
 }
 

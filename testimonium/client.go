@@ -10,6 +10,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -25,6 +26,7 @@ import (
 	"math/big"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -48,17 +50,8 @@ type Client struct {
 }
 
 type BlockHeader struct {
-	Parent                    [32]byte
-	UncleHash                 [32]byte
-	StateRoot                 [32]byte
-	TransactionsRoot          [32]byte
-	ReceiptsRoot              [32]byte
+	Hash					  [32]byte
 	BlockNumber               *big.Int
-	GasLimit                  *big.Int
-	RlpHeaderHashWithoutNonce [32]byte
-	Timestamp                 *big.Int
-	Nonce                     *big.Int
-	Difficulty                *big.Int
 	TotalDifficulty           *big.Int
 }
 
@@ -76,21 +69,11 @@ const (
 
 func (header BlockHeader) String() string {
 	return fmt.Sprintf(`BlockHeader: {
-Parent: %s,
-StateRoot: %s,
-TransactionsRoot: %s,
-ReceiptsRoot: %s,
+Hash: %s,
 BlockNumber: %s,
-RlpHeaderHashWithoutNonce: %s,
-Nonce: %s,
 TotalDifficulty: %s }`,
-		common.Bytes2Hex(header.Parent[:]),
-		common.Bytes2Hex(header.StateRoot[:]),
-		common.Bytes2Hex(header.TransactionsRoot[:]),
-		common.Bytes2Hex(header.ReceiptsRoot[:]),
+		common.Bytes2Hex(header.Hash[:]),
 		header.BlockNumber.String(),
-		common.Bytes2Hex(header.RlpHeaderHashWithoutNonce[:]),
-		header.Nonce.String(),
 		header.TotalDifficulty.String())
 }
 
@@ -103,7 +86,7 @@ func (event TestimoniumRemoveBranch) String() string {
 }
 
 func (event TestimoniumPoWValidationResult) String() string {
-	return fmt.Sprintf("PoWValidationResultEvent: { isPoWValid: %t, errorCode: %d, errorInfo: %d }", event.IsPoWValid, event.ErrorCode, event.ErrorInfo)
+	return fmt.Sprintf("PoWValidationResultEvent: { returnCode: %d, errorInfo: %d }", event.ReturnCode, event.ErrorInfo)
 }
 
 func (result VerificationResult) String() string {
@@ -354,7 +337,7 @@ func (c Client) BlockHeaderExists(blockHash [32]byte, chain uint8) (bool, error)
 	if !exists {
 		return false, fmt.Errorf("chain %s does not exist", chain)
 	}
-	return c.chains[chain].testimoniumContract.IsBlock(nil, blockHash)
+	return c.chains[chain].testimoniumContract.IsHeaderStored(nil, blockHash)
 }
 
 func (c Client) BlockHeader(blockHash [32]byte, chain uint8) (BlockHeader, error) {
@@ -500,6 +483,27 @@ func (c Client) RandomizeHeader(header *types.Header, chain uint8) *types.Header
 	header.ReceiptHash = header.Root
 	header.Root = temp
 	return header
+}
+
+func (c Client) GetHeaderFromTxData(txHash [32]byte, chain uint8) *types.Header {
+	if _, exists := c.chains[chain]; !exists {
+		log.Fatalf("Chain '%d' does not exist", chain)
+	}
+	tx, isPending, err := c.chains[chain].client.TransactionByHash(context.Background(), common.BytesToHash(txHash[:]))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if isPending {
+		log.Fatal("Tx is pending, thus header to dispute has not been stored in the smart contract yet")
+	}
+
+	// load contract ABI
+	//abi, err := abi.JSON(strings.NewReader(myContractAbi))
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	log.Println(tx.Data())
+	return nil
 }
 
 func (c Client) DisputeBlock(blockHash [32]byte, dataSetLookUp []*big.Int, witnessForLookup []*big.Int, chain uint8) {
