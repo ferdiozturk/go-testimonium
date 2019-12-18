@@ -4,40 +4,50 @@
 package cmd
 
 import (
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/pantos-io/go-testimonium/ethereum/ethash"
+	"github.com/pantos-io/go-testimonium/testimonium"
 	"github.com/spf13/cobra"
+	"log"
 )
 
-var disputeFlagChain uint8
+var disputeFlagSrcChain uint8
+var disputeFlagDestChain uint8
 
 // disputeCmd represents the dispute command
 var disputeCmd = &cobra.Command{
-	Use:   "dispute [blockHash]",
+	Use:   "dispute [txHash]",
 	Short: "Disputes a submitted block header",
-	Long: `Disputes the submitted block header with the specified hash ('blockHash')`,
+	Long: `Disputes the submitted block header that was submitted through the specified transaction (txHash)`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		blockHash := common.HexToHash(args[0])	// omit the first two chars "0x"
-		blockHashBytes := blockHash.Bytes()
-		var blockHashBytes32 [32]byte
-		copy(blockHashBytes32[:], blockHashBytes)
+		txHash := common.HexToHash(args[0]) // omit the first two chars "0x"
 
 		// get blockNumber, nonce and RlpHeaderHashWithoutNonce and generate dataSetLookup and witnessForLookup
 		testimoniumClient = createTestimoniumClient()
-		testimoniumClient.GetHeaderFromTxData(blockHashBytes32, disputeFlagChain)
-		//header, err := testimoniumClient.BlockHeader(blockHashBytes32, disputeFlagChain)
-		//if err != nil {
-		//	log.Fatal("Failed to retrieve header from contract: " + err.Error())
-		//}
-		//
-		//fmt.Println("create DAG, compute dataSetLookup and witnessForLookup")
-		//// get DAG and compute dataSetLookup and witnessForLookup
-		//blockMetaData := ethash.NewBlockMetaData(header.BlockNumber.Uint64(), header.Nonce.Uint64(), header.RlpHeaderHashWithoutNonce)
-		//dataSetLookup := blockMetaData.DAGElementArray()
-		//witnessForLookup := blockMetaData.DAGProofArray()
-		//
-		//testimoniumClient.DisputeBlock(blockHash, dataSetLookup, witnessForLookup, disputeFlagChain)
+		header, err := testimoniumClient.GetHeaderFromTxData(txHash, disputeFlagDestChain)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println("create DAG, compute dataSetLookup and witnessForLookup")
+		// get DAG and compute dataSetLookup and witnessForLookup
+		rlpHeaderWithoutNonce, err := testimonium.RlpHeaderWithoutNonce(header)
+		if err != nil {
+			log.Fatal(err)
+		}
+		rlpHeaderHashWithoutNonce := crypto.Keccak256Hash(rlpHeaderWithoutNonce)
+		blockMetaData := ethash.NewBlockMetaData(header.Number.Uint64(), header.Nonce.Uint64(), rlpHeaderHashWithoutNonce)
+		dataSetLookup := blockMetaData.DAGElementArray()
+		witnessForLookup := blockMetaData.DAGProofArray()
+		parent, err := testimoniumClient.OriginalBlockHeader(header.ParentHash, disputeFlagSrcChain)
+		if err != nil {
+			log.Fatal(err)
+		}
+		testimoniumClient.DisputeBlock(header, parent.Header(), dataSetLookup, witnessForLookup, disputeFlagDestChain)
 	},
 }
 
@@ -53,5 +63,6 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// disputeCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	disputeCmd.Flags().Uint8VarP(&disputeFlagChain, "chain", "c", 1, "the disputed chain ID")
+	disputeCmd.Flags().Uint8VarP(&disputeFlagSrcChain, "source", "s", 0, "source chain")
+	disputeCmd.Flags().Uint8VarP(&disputeFlagDestChain, "chain", "d", 1, "destination chain")
 }
